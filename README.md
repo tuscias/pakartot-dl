@@ -6,12 +6,9 @@ pip install python-slugify
 
 Run the script:
 ```
-C:\>python pakartot-dl.py -u <url> -s <saveFolderLocation> 
+python pakartot-dl.py -u https://www.pakartot.lt/album/vaiku-kambarys -s D:\dainos\ -c
 ```
-or
-```
-C:\>python pakartot-dl.py -f <fileWithUrls> -s <saveFolderLocation> -c
-```
+
 Parameters:
 ```
 -u    Scrape album data from url and download all files
