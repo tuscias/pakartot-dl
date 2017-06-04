@@ -1,80 +1,37 @@
 import os
 import sys
-import json
-import urllib
-import urllib2
 import argparse
 from slugify import slugify
+import libpakartot as libpa
 
 
-FILENAME = __file__
-URL = 'https://www.pakartot.lt'
-API_URL = 'https://api.pakartot.lt/'
-USERNAME = 'publicUSR'
-PASSWORD = 'vka3qaGHowofKcRdTeiV'
-
-
-def doRequest(url, additionalParams):
-    params = {'username': USERNAME, 'password': PASSWORD, 'url': url}
-    params.update(additionalParams)
-    data = urllib.urlencode(params)
-
-    return urllib2.urlopen(API_URL, data)
-
-def getAlbumId(url):
-    html = urllib2.urlopen(url).read()
-    index = html.find('class="play-release" title="')
-    index2 = html.find('"', index + 52)
-
-    return html[index + 52:index2]
-
-def getAlbum(albumUrl):
-    albumId = getAlbumId(albumUrl)
-    response = doRequest('album', {'id': albumId})
-    data = json.loads(response.read())
-    return data['album']
-
-
-def getAlbumTracks(albumUrl):
-    albumId = getAlbumId()
-    response = doRequest('album', {'id': albumId})
-    data = json.loads(response.read())
-    return data['tracks']
-
-def downloadAlbum(album, saveFolder, createAlbumFolder=False, downloadCoverArt=False):
-    response = doRequest('play', {'action': 'album', 'id': album['album_id']})
-    data = json.loads(response.read())
+def downloadAlbum(albumId, saveFolder, createAlbumFolder=False, downloadCoverArt=False):
+    album = libpa.getAlbumInfo(albumId)
+    albumName = slugify(album['album_name'])
 
     if createAlbumFolder:
-        saveFolder = os.path.join(saveFolder, slugify(album['album_name']))
+        saveFolder = os.path.join(saveFolder, albumName)
 
     if not os.path.exists(saveFolder):
         os.makedirs(saveFolder)
 
     if downloadCoverArt:
         coverArtUrl = album['photo_path']
-        coverArtContent = urllib2.urlopen(coverArtUrl).read()
-        coverSaveLocation = os.path.join(saveFolder, 'cover.jpg')
+        saveLocation =  os.path.join(saveFolder, albumName + '.jpg')
+        libpa.downloadCoverArt(coverArtUrl, saveLocation)
 
-        with open(coverSaveLocation, 'wb') as f:
-            f.write(coverArtContent)
-
-    for i, track in enumerate(data['tracks']):
+    tracks = libpa.getAlbumTracksInfoEx(albumId)
+    for i, track in enumerate(tracks):
         trackUrl = track['filename']
         title = slugify(track['title'])
         fileName = "%s.%s.mp3" % (i+1, title)
 
         saveLocation = os.path.join(saveFolder, fileName)
 
-        print 'Downloading "%s"...' % title,
-
-        req = urllib2.Request(trackUrl)
-        req.add_header('User-Agent', 'iPhone;')
-        fileContent = urllib2.urlopen(req).read()
-
-        print ' to "%s"' % saveLocation
-        with open(saveLocation, 'wb') as f:
-            f.write(fileContent)
+        libpa.downloadTrack(trackUrl, saveLocation)
+        print 'Downloading "%s"' % fileName
+    print
+    print 'Saved to "%s"' % saveFolder
 
 
 def main(argv):
@@ -100,17 +57,21 @@ def main(argv):
         print 'Save location "%s" does not exist.' % saveFolder
         sys.exit(2)
 
-    if albumUrl != '':
+    if albumUrl is not None:
         albumUrls.append(albumUrl)
-    elif os.path.exists(urlFilePath):
+    else:
+        if not os.path.exists(urlFilePath):
+            print 'File "%s" does not exist.' % urlFilePath
+            sys.exit(2)
+
         for line in open(urlFilePath).readlines():
             albumUrls.append(line.strip())
 
     for url in albumUrls:
         print '-' * 50
         print 'Preparing to download "%s"' % url
-        album = getAlbum(url)
-        downloadAlbum(album, saveFolder, createAlbumFolder, downloadCoverArt)
+        albumId = libpa.getAlbumId(url)
+        downloadAlbum(albumId, saveFolder, createAlbumFolder, downloadCoverArt)
 
     print 'Done.'
 
