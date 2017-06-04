@@ -1,10 +1,11 @@
 import os
 import sys
 import json
-import getopt
 import urllib
 import urllib2
+import argparse
 from slugify import slugify
+
 
 FILENAME = __file__
 URL = 'https://www.pakartot.lt'
@@ -40,8 +41,7 @@ def getAlbumTracks(albumUrl):
     data = json.loads(response.read())
     return data['tracks']
 
-
-def downloadAlbum(album, saveFolder, createAlbumFolder=False):
+def downloadAlbum(album, saveFolder, createAlbumFolder=False, downloadCoverArt=False):
     response = doRequest('play', {'action': 'album', 'id': album['album_id']})
     data = json.loads(response.read())
 
@@ -50,6 +50,14 @@ def downloadAlbum(album, saveFolder, createAlbumFolder=False):
 
     if not os.path.exists(saveFolder):
         os.makedirs(saveFolder)
+
+    if downloadCoverArt:
+        coverArtUrl = album['photo_path']
+        coverArtContent = urllib2.urlopen(coverArtUrl).read()
+        coverSaveLocation = os.path.join(saveFolder, 'cover.jpg')
+
+        with open(coverSaveLocation, 'wb') as f:
+            f.write(coverArtContent)
 
     for i, track in enumerate(data['tracks']):
         trackUrl = track['filename']
@@ -70,38 +78,30 @@ def downloadAlbum(album, saveFolder, createAlbumFolder=False):
 
 
 def main(argv):
-    albumUrl = ''
-    urlFilePath = ''
-    saveFolder = ''
-    createAlbumFolder = False
+    parser = argparse.ArgumentParser(description='Downloads mp3 from pakartot.lt site')
+    parser.add_argument('-u', '--url', help='An url. If not given, -f is required')
+    parser.add_argument('-f', '--file', help='A text file with urls separated by new lines. If not given, -u is required')
+    parser.add_argument('-s', '--save-folder', type=str, required=True, help='A folder (required)')
+    parser.add_argument('-c', action='store_true', help='Create separate album folder')
+    parser.add_argument('-a', action='store_true', help='Download album cover-art')
+
+    args = parser.parse_args(argv)
+    if not args.url and not args.file:
+        parser.error ('either -u or -f is required.')
+
     albumUrls = []
-
-    try:
-        opts, args = getopt.getopt(argv, "hu:f:s:c", ["album-url=", "url-file=", "save-folder="])
-    except getopt.GetoptError:
-        print '%s -u <albumUrl> -s <saveFolder>' % FILENAME
-        sys.exit(2)
-
-    for opt, arg in opts:
-        if opt == '-h':
-            print '%s -u <albumUrl> -s <saveFolder> [-c]' % FILENAME
-            sys.exit()
-
-        elif opt in ("-u", "--album-url"):
-            albumUrl = arg
-        elif opt in ("-f", "--url-file"):
-            urlFilePath = arg
-        elif opt in ("-s", "--save-folder"):
-            saveFolder = arg
-        elif opt == "-c":
-            createAlbumFolder = True
+    albumUrl = args.url
+    urlFilePath = args.file
+    saveFolder = args.save_folder
+    createAlbumFolder = args.c
+    downloadCoverArt = args.a
 
     if not createAlbumFolder and not os.path.exists(saveFolder):
         print 'Save location "%s" does not exist.' % saveFolder
         sys.exit(2)
 
     if albumUrl != '':
-        albumUrls = [albumUrl]
+        albumUrls.append(albumUrl)
     elif os.path.exists(urlFilePath):
         for line in open(urlFilePath).readlines():
             albumUrls.append(line.strip())
@@ -110,7 +110,7 @@ def main(argv):
         print '-' * 50
         print 'Preparing to download "%s"' % url
         album = getAlbum(url)
-        downloadAlbum(album, saveFolder, createAlbumFolder)
+        downloadAlbum(album, saveFolder, createAlbumFolder, downloadCoverArt)
 
     print 'Done.'
 
